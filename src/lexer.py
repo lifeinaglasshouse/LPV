@@ -26,7 +26,10 @@ import traceback
 
 class LPV_Lexer:
     initiliazing = False
-    def __init__(self):
+    def __init__(self, do_count_char:bool=False):
+        self.can_count = do_count_char
+        if do_count_char:
+            self.count_char = 0
         if not "rules" in self.__dict__:
             raise TypeError("no self.rules found")
         r = []
@@ -67,6 +70,17 @@ class LPV_Lexer:
             pointer_width=pointer_width,
             **kwargs
         )
+    
+    def increase_count(self, num:int=1):
+        if self.can_count is True:
+            self.count_char += num
+    def reset_count(self):
+        if self.can_count is True:
+            self.count_char = 0
+    def get_count(self):
+        if self.can_count is True:
+            return (self.count_char,)
+        return ()
     
     def next_char(self):
         self.pos += 1
@@ -123,10 +137,27 @@ class LPV_Lexer:
                 r += c
         return r
     
-    def match_string(self, string: str, start:int=0):
-        return string == self.slice(len(string), start)
+    def match_string(self, string: str, start:int=0, incase_sensitive:bool=False):
+        slc = self.slice(len(string), start)
+        r = (string == slc) if incase_sensitive is False else (string.lower() == slc.lower())
+        if r is True:
+            self.increase_count(len(string))
+        return r
     
     def match_optional(self, *objs, **kwargs):
+        for o in objs:
+            if self.match(o, **kwargs):
+                return True
+        return False
+    
+    def match_optional(self, *objs, **kwargs):
+        for o in objs:
+            if self.match(o, **kwargs):
+                return True
+        return False
+
+    def match_optional_incase(self, *objs, **kwargs):
+        kwargs["incase_sensitive"] = True
         for o in objs:
             if self.match(o, **kwargs):
                 return True
@@ -138,16 +169,23 @@ class LPV_Lexer:
                 return False
         return True
     
-    def match(self, obj: Union[tuple, list, str, Callable], **kwargs):
+    def match(self, obj: Union[tuple, list, set, str, Callable], **kwargs):
         if isinstance(obj, str):
             return self.match_string(obj, **kwargs)
         elif isinstance(obj, tuple):
             return self.match_forward(*obj)
         elif isinstance(obj, list):
             return self.match_optional(*obj, **kwargs)
+        elif isinstance(obj, set):
+            return self.match_optional_incase(*obj, **kwargs)
         elif isinstance(obj, Callable):
             arg = self.peek(kwargs["start"]) if "start" in kwargs else self.char
-            return True if (arg is not None and obj(arg)) else False
+            if arg is None:
+                return False
+            r = True if obj(arg) else False
+            if r is True:
+                self.increase_count()
+            return r
         else:
             raise TypeError(f"Only accept type tuple, list, str or Callable: {obj}")
     
@@ -169,10 +207,11 @@ class LPV_Lexer:
             while not self.is_eof():
                 lc = self.line, self.col
                 for rule, func in self.rules:
+                    self.reset_count()
                     if self.match(rule):
                         if ignore_un_update_pos is False:
                             p = self.pos
-                            r = func()
+                            r = func(*self.get_count())
                             if self.pos == p:
                                 raise TypeError(
                                     f"{func.__name__} must move to the next position atleast once"
