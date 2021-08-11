@@ -47,6 +47,8 @@ class Token:
         )
     def __eq__(self, o: object) -> bool:
         return (self.type == o) if isinstance(o, TokenType) else (self.value == o)
+    def __ne__(self, o: object) -> bool:
+        return not self.__eq__(o)
 
 def generate_tokens(name: str, tokens: Iterable[str], build:bool=False):
     if not name.isidentifier():

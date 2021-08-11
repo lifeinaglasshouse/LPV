@@ -64,11 +64,15 @@ class LPV_Parser:
     def get_lc(self):
         return self.line, self.col
     
-    def throw_error(self, error, msg, pointer_width:int=1, **kwargs):
+    def throw_error(self, error, msg, pointer_width:int=None, **kwargs):
         raise LPV_Exception(
             error=error, msg=msg,
             line=self.line, col=self.col,
-            source=self.source, pointer_width=pointer_width,
+            source=self.source, 
+            pointer_width=pointer_width if pointer_width is not None
+            else (
+                len(str(self.token.value)) if self.token is not None else 1
+            ),
             when="Parser", **kwargs
         )
     
@@ -87,7 +91,8 @@ class LPV_Parser:
         msg = "Unexpected "+("EOF" if self.is_eof() else f"'{self.token.value}'")
         self.throw_error(
             ErrorType.SYNTAX, msg+", expected "+(
-                type_.name if isinstance(type_, TokenType) else " or ".join(type_)
+                type_.name if isinstance(type_, TokenType) else 
+                ", ".join((str(x) for x in type_[:-1]))+" or "+str(type_[-1])
             ),
         )
     

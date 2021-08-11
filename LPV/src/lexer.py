@@ -22,26 +22,29 @@
 from LPV.src.token import Token, TokenTree
 from LPV.src.error import ErrorType, LPV_Exception
 from typing import Callable, Union
-import traceback
+import traceback, inspect
+
+def islambda(obj):
+    l = lambda:None
+    return isinstance(obj, type(l)) and obj.__name__ == l.__name__
 
 class LPV_Lexer:
     initiliazing = False
-    def __init__(self, do_count_char:bool=False):
-        self.can_count = do_count_char
-        if do_count_char:
-            self.count_char = 0
+    def __init__(self):
+        self.can_count = False
+        self.count_char = -1
         if not "rules" in self.__dict__:
             raise TypeError("no self.rules found")
         r = []
         for k, v in (self.rules.items()) if isinstance(self.rules, dict) else (self.rules):
-            is_callable = isinstance(v, Callable)
-            if not is_callable and isinstance(v, str):
+            if isinstance(v, str):
                 r.append((k, getattr(self, ('lex_'+v) if not v.startswith("lex_") else v)))
-            elif is_callable:
+            elif isinstance(v, Callable):
                 if not v.__name__.startswith("lex_"):
-                    raise TypeError(
-                        f"self.rules rule function must start with 'lex_': {v.__name__}"
-                    )
+                    if not islambda(v):
+                        raise TypeError(
+                            f"self.rules rule function must start with 'lex_' or can be lambda: {v.__name__}"
+                        )
                 r.append((k, v))
             else:
                 raise TypeError(
@@ -64,11 +67,10 @@ class LPV_Lexer:
     
     def throw_error(self, error, msg, pointer_width:int=1, **kwargs):
         raise LPV_Exception(
-            error=error, msg=msg,
-            line=self.line, col=self.col,
-            source=self.source, when="Lexer",
-            pointer_width=pointer_width,
-            **kwargs
+            **{"error":error, "msg":msg,
+            "line":self.line, "col":self.col,
+            "source":self.source, "when":"Lexer",
+            "pointer_width":pointer_width, **kwargs}
         )
     
     def increase_count(self, num:int=1):
@@ -100,13 +102,30 @@ class LPV_Lexer:
         return self.source[pos]
     
     def enter(self, step=1):
+        c = []
         for _ in range(step):
+            if self.char is None:
+                self.throw_error(
+                    ErrorType.SYNTAX,
+                    "Unexpected EOF while scanning",
+                    col=self.col-1
+                )
+            c.append(self.char)
             self.chars += self.char
             self.next_char()
     
     def skip(self, step=1):
+        c = []
         for _ in range(step):
+            if self.char is None:
+                self.throw_error(
+                    ErrorType.SYNTAX,
+                    "Unexpected EOF while scanning",
+                    col=self.col-1
+                )
+            c.append(self.char)
             self.next_char()
+        return c
     
     def clear(self):
         c = self.chars
@@ -121,13 +140,39 @@ class LPV_Lexer:
         self.skip(step=step)
         return self.clear()
     
-    def enter_while(self, expr: Callable):
-        while not self.is_eof() and expr(self.char):
+    def enter_while(self, expr: Union[tuple, list, set, str, Callable]):
+        while not self.is_eof() and self.match(expr):
             self.enter()
+    
+    def skip_while(self, expr: Union[tuple, list, set, str, Callable]):
+        while not self.is_eof() and self.match(expr):
+            self.skip()
+    
+    def enter_if(self, obj: Union[tuple, list, set, str, Callable]):
+        if self.match(obj):
+            return self.enter()
+        self.throw_error(
+            error=ErrorType.SYNTAX,
+            msg=f"Unexpected "+(
+                "character: "+self.char if self.char is not None
+                else (
+                    "EOF while scanning"
+                )
+            )
+        )
 
-    def skip_while(self, expr: Callable):
-        while not self.is_eof() and expr(self.char):
-            self.skip()    
+    def skip_if(self, obj: Union[tuple, list, set, str, Callable]):
+        if self.match(obj):
+            return self.skip()
+        self.throw_error(
+            error=ErrorType.SYNTAX,
+            msg=f"Unexpected "+(
+                "character: "+self.char if self.char is not None
+                else (
+                    "EOF while scanning"
+                )
+            )
+        )
     
     def slice(self, step:int, start:int=0):
         r = ""
@@ -207,6 +252,10 @@ class LPV_Lexer:
             while not self.is_eof():
                 lc = self.line, self.col
                 for rule, func in self.rules:
+                    if len(inspect.signature(func).parameters) < 1:
+                        self.can_count = False
+                    else:
+                        self.can_count = True
                     self.reset_count()
                     if self.match(rule):
                         if ignore_un_update_pos is False:
