@@ -73,3 +73,10 @@ v2.1
         but there's still one problem.
 
         If there's rule function that doesn't accept the length argument, then we just going to get `TypeError`. To fix this, we need to make all rules function to accept atleast one argument so we not going to get any error. Aren't that's annoying? That's why the LPV_Lexer don't need `do_count_char` argument anymore. If you want to get the match length, just add one argument to your rule function. It will automatically detect it and passed the length.
+
+v2.2
+_Note: This is a quick update, will improve later_
+- Fixed Token 'in' operator
+
+    If you try Token in (TokenType, TokenType, ...) and it doesn't work as you expect, then
+    good news for you! It fixed

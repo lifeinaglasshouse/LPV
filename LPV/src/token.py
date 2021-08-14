@@ -27,8 +27,10 @@ class TokenType:
         self.name = name
     def __repr__(self):
         return self.name
-    def __eq__(self, o: str):
-        return self.name == o
+    def __eq__(self, o):
+        if isinstance(o, Token):
+            return self.name == o.type
+        return (self.name == o) if not isinstance(o, TokenType) else (self.name == o.name)
 
 class Token:
     
@@ -46,6 +48,8 @@ class Token:
             type=self.type,value=self.value
         )
     def __eq__(self, o: object) -> bool:
+        if isinstance(o, Token):
+            return (self.type == o.type and self.value == o.value)
         return (self.type == o) if isinstance(o, TokenType) else (self.value == o)
     def __ne__(self, o: object) -> bool:
         return not self.__eq__(o)
